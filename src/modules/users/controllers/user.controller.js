@@ -14,7 +14,7 @@ exports.loginUser = async (req, res) => {
   try {
     const data = req.body;
     const { message, token, user } = await userService.loginUserService(data);
-    res.status(200).json({ message, token, user });
+    res.status(200).json({ message, token, user, role: user.role });
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }

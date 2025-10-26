@@ -30,14 +30,15 @@ class ApplicantsService {
         referrer,
         email,
         phone,
+        employment_type,
       } = data;
 
       const examination_code = await this.generateUniqueExamCode();
 
       const result = await pool.query(
         `INSERT INTO applicants 
-           (full_name, position_applied, application_status, employment_status, examination_code, resume_url, referrer, email, phone)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           (full_name, position_applied, application_status, employment_status, examination_code, resume_url, referrer, email, phone, employment_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
         [
           full_name,
@@ -49,6 +50,7 @@ class ApplicantsService {
           referrer,
           email,
           phone,
+          employment_type,
         ]
       );
 
@@ -113,6 +115,8 @@ class ApplicantsService {
         updated_by,
         updated_by_role,
         new_status,
+        examination_date,
+        final_interview_date,
       } = data;
 
       // Set employment_status to "Onboarding" if new_status is "Hired"
@@ -125,21 +129,25 @@ class ApplicantsService {
       // 🔹 Update applicant record
       const result = await client.query(
         `UPDATE applicants
-         SET full_name = COALESCE($1, full_name),
-             position_applied = COALESCE($2, position_applied),
-             application_status = COALESCE($3, application_status),
-             employment_status = COALESCE($4, employment_status),
-             date_hired = CASE
-               WHEN $3 = 'Hired' AND date_hired IS NULL THEN NOW()
-               ELSE date_hired
-             END
-         WHERE applicant_id = $5
-         RETURNING *`,
+       SET full_name = COALESCE($1, full_name),
+           position_applied = COALESCE($2, position_applied),
+           application_status = COALESCE($3, application_status),
+           employment_status = COALESCE($4, employment_status),
+           examination_date = COALESCE($5, examination_date),
+           final_interview_date = COALESCE($6, final_interview_date),
+           date_hired = CASE
+             WHEN $3 = 'Hired' AND date_hired IS NULL THEN NOW()
+             ELSE date_hired
+           END
+       WHERE applicant_id = $7
+       RETURNING *`,
         [
           full_name,
           position_applied,
           new_status || application_status,
           employment_status,
+          examination_date,
+          final_interview_date,
           id,
         ]
       );
@@ -159,8 +167,7 @@ class ApplicantsService {
       // 🔹 Insert into examination_details if new_status is "Examination"
       if (new_status === "Examination") {
         await client.query(
-          `INSERT INTO examini_details
-          (examination_id) VALUES($1, $2)`,
+          `INSERT INTO examini_details (examination_id) VALUES($1)`,
           [examination_code]
         );
       }
@@ -169,8 +176,8 @@ class ApplicantsService {
       if (application_status || employment_status) {
         await client.query(
           `INSERT INTO applicant_status_history
-             (applicant_id, status_type, status_value, comment, updated_by, updated_by_role)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+           (applicant_id, status_type, status_value, comment, updated_by, updated_by_role)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
           [
             id,
             employment_status ? "Employment" : "Application",
