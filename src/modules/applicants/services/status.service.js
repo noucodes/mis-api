@@ -39,7 +39,9 @@ class StatusService {
   // Get all status history records (for admin overview, if needed)
   async getAllStatuses() {
     try {
-      const result = await pool.query(`SELECT * FROM applicant_status_history`);
+      const result = await pool.query(
+        `SELECT * FROM applicant_status_history ORDER BY status_id DESC`
+      );
       return result.rows;
     } catch (error) {
       console.error("Error in service fetching all statuses:", error);

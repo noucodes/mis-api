@@ -22,26 +22,29 @@ class ApplicantsService {
   async createApplicant(data) {
     try {
       const {
-        full_name,
+        first_name,
+        last_name,
         position_applied,
-        application_status = "Initial Interview",
+        application_status = "Applied",
         employment_status = "Applicant",
         resume_url,
         referrer,
         email,
         phone,
-        employment_type,
+        employment_location,
+        job_source,
       } = data;
 
       const examination_code = await this.generateUniqueExamCode();
 
       const result = await pool.query(
         `INSERT INTO applicants 
-           (full_name, position_applied, application_status, employment_status, examination_code, resume_url, referrer, email, phone, employment_type)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           (first_name, last_name, position_applied, application_status, employment_status, examination_code, resume_url, referrer, email, phone, employment_location, job_source)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          RETURNING *`,
         [
-          full_name,
+          first_name,
+          last_name,
           position_applied,
           application_status,
           employment_status,
@@ -50,7 +53,8 @@ class ApplicantsService {
           referrer,
           email,
           phone,
-          employment_type,
+          employment_location,
+          job_source,
         ]
       );
 
@@ -107,7 +111,8 @@ class ApplicantsService {
     const client = await pool.connect();
     try {
       let {
-        full_name,
+        first_name,
+        last_name,
         position_applied,
         application_status,
         employment_status,
@@ -129,20 +134,22 @@ class ApplicantsService {
       // 🔹 Update applicant record
       const result = await client.query(
         `UPDATE applicants
-       SET full_name = COALESCE($1, full_name),
-           position_applied = COALESCE($2, position_applied),
-           application_status = COALESCE($3, application_status),
-           employment_status = COALESCE($4, employment_status),
-           examination_date = COALESCE($5, examination_date),
-           final_interview_date = COALESCE($6, final_interview_date),
+       SET first_name = COALESCE($1, first_name),
+           last_name = COALESCE($2, last_name),
+           position_applied = COALESCE($3, position_applied),
+           application_status = COALESCE($4, application_status),
+           employment_status = COALESCE($5, employment_status),
+           examination_date = COALESCE($6, examination_date),
+           final_interview_date = COALESCE($7, final_interview_date),
            date_hired = CASE
              WHEN $3 = 'Hired' AND date_hired IS NULL THEN NOW()
              ELSE date_hired
            END
-       WHERE applicant_id = $7
+       WHERE applicant_id = $8
        RETURNING *`,
         [
-          full_name,
+          first_name,
+          last_name,
           position_applied,
           new_status || application_status,
           employment_status,

@@ -6,7 +6,8 @@ const employeeDetailsRoutes = require("../modules/employee_details/routes/employ
 const applicantsRoutes = require("../modules/applicants/routes/applicants.route");
 const applicantsStatusRoutes = require("../modules/applicants/routes/status.route");
 const onboardingRoutes = require("../modules/applicants/routes/onboarding.route");
-const reportsRoutes = require("../modules/applicants/routes/reports.route"); // New route import
+const reportsRoutes = require("../modules/applicants/routes/reports.route");
+const examinationRoutes = require("../modules/applicants/routes/examination.route");
 const authMiddleware = require("../middlewares/auth");
 const logger = require("../middlewares/logging");
 
@@ -31,7 +32,10 @@ router.use("/status", applicantsStatusRoutes);
 router.use("/onboarding", onboardingRoutes);
 
 // Mount reports routes
-router.use("/reports", reportsRoutes); // New route mounting
+router.use("/reports", reportsRoutes);
+
+// Mount examination routes
+router.use("/examinations", examinationRoutes);
 
 // Protected dashboard route
 router.get("/dashboard", authMiddleware, (req, res) => {

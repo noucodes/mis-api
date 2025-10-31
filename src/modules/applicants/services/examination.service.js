@@ -2,23 +2,25 @@ const pool = require("../../../config/db");
 
 class ExaminationService {
   // ✅ Get examination data for an applicant (combines all phases)
-  async getExaminationByApplicantId(applicantId) {
+  async getExaminationByExaminationId(examinationId) {
     try {
       const [phaseOneRes, phaseTwoRes, phaseThreeRes, phaseFourRes] =
         await Promise.all([
-          pool.query("SELECT * FROM phaseone_results WHERE applicant_id = $1", [
-            applicantId,
-          ]),
-          pool.query("SELECT * FROM phasetwo_results WHERE applicant_id = $1", [
-            applicantId,
-          ]),
           pool.query(
-            "SELECT * FROM phasethree_results WHERE applicant_id = $1",
-            [applicantId]
+            "SELECT * FROM phaseone_results WHERE examination_code = $1",
+            [examinationId]
           ),
           pool.query(
-            "SELECT * FROM phasefour_results WHERE applicant_id = $1",
-            [applicantId]
+            "SELECT * FROM phasetwo_results WHERE examination_code = $1",
+            [examinationId]
+          ),
+          pool.query(
+            "SELECT * FROM phasethree_results WHERE examination_code = $1",
+            [examinationId]
+          ),
+          pool.query(
+            "SELECT * FROM phasefour_results WHERE examination_code = $1",
+            [examinationId]
           ),
         ]);
 
@@ -36,11 +38,11 @@ class ExaminationService {
   }
 
   // ✅ Create Phase One result
-  async createPhaseOneResult(applicantId, result) {
+  async createPhaseOneResult(examinationId, result) {
     try {
       const res = await pool.query(
-        "INSERT INTO phaseone_results (applicant_id, result) VALUES ($1, $2) RETURNING *",
-        [applicantId, result]
+        "INSERT INTO phaseone_results (examination_code, result) VALUES ($1, $2) RETURNING *",
+        [examinationId, result]
       );
       return res.rows[0];
     } catch (error) {
@@ -50,11 +52,11 @@ class ExaminationService {
   }
 
   // ✅ Update Phase One result
-  async updatePhaseOneResult(applicantId, result) {
+  async updatePhaseOneResult(examinationId, result) {
     try {
       const res = await pool.query(
-        "UPDATE phaseone_results SET result = $1 WHERE applicant_id = $2 RETURNING *",
-        [result, applicantId]
+        "UPDATE phaseone_results SET result = $1 WHERE examination_code = $2 RETURNING *",
+        [result, examinationId]
       );
       return res.rows[0];
     } catch (error) {
@@ -64,11 +66,11 @@ class ExaminationService {
   }
 
   // ✅ Create Phase Two result
-  async createPhaseTwoResult(applicantId, result) {
+  async createPhaseTwoResult(examinationId, result) {
     try {
       const res = await pool.query(
-        "INSERT INTO phasetwo_results (applicant_id, result) VALUES ($1, $2) RETURNING *",
-        [applicantId, result]
+        "INSERT INTO phasetwo_results (examination_code, result) VALUES ($1, $2) RETURNING *",
+        [examinationId, result]
       );
       return res.rows[0];
     } catch (error) {
@@ -78,11 +80,11 @@ class ExaminationService {
   }
 
   // ✅ Update Phase Two result
-  async updatePhaseTwoResult(applicantId, result) {
+  async updatePhaseTwoResult(examinationId, result) {
     try {
       const res = await pool.query(
-        "UPDATE phasetwo_results SET result = $1 WHERE applicant_id = $2 RETURNING *",
-        [result, applicantId]
+        "UPDATE phasetwo_results SET result = $1 WHERE examination_code = $2 RETURNING *",
+        [result, examinationId]
       );
       return res.rows[0];
     } catch (error) {
@@ -92,11 +94,11 @@ class ExaminationService {
   }
 
   // ✅ Create Phase Three result
-  async createPhaseThreeResult(applicantId, { wpm, image_url }) {
+  async createPhaseThreeResult(examinationId, { wpm, image_url }) {
     try {
       const res = await pool.query(
-        "INSERT INTO phasethree_results (applicant_id, wpm, image_url) VALUES ($1, $2, $3) RETURNING *",
-        [applicantId, wpm, image_url]
+        "INSERT INTO phasethree_results (examination_code, wpm, image_url) VALUES ($1, $2, $3) RETURNING *",
+        [examinationId, wpm, image_url]
       );
       return res.rows[0];
     } catch (error) {
@@ -106,15 +108,15 @@ class ExaminationService {
   }
 
   // ✅ Update Phase Three result
-  async updatePhaseThreeResult(applicantId, { wpm, image_url }) {
+  async updatePhaseThreeResult(examinationId, { wpm, image_url }) {
     try {
       const res = await pool.query(
         `UPDATE phasethree_results 
          SET wpm = COALESCE($1, wpm),
              image_url = COALESCE($2, image_url)
-         WHERE applicant_id = $3
+         WHERE examination_code = $3
          RETURNING *`,
-        [wpm, image_url, applicantId]
+        [wpm, image_url, examinationId]
       );
       return res.rows[0];
     } catch (error) {
@@ -124,11 +126,11 @@ class ExaminationService {
   }
 
   // ✅ Create Phase Four result
-  async createPhaseFourResult(applicantId, file_url) {
+  async createPhaseFourResult(examinationId, file_url) {
     try {
       const res = await pool.query(
-        "INSERT INTO phasefour_results (applicant_id, file_url) VALUES ($1, $2) RETURNING *",
-        [applicantId, file_url]
+        "INSERT INTO phasefour_results (examination_code, file_url) VALUES ($1, $2) RETURNING *",
+        [examinationId, file_url]
       );
       return res.rows[0];
     } catch (error) {
@@ -138,11 +140,11 @@ class ExaminationService {
   }
 
   // ✅ Update Phase Four result
-  async updatePhaseFourResult(applicantId, file_url) {
+  async updatePhaseFourResult(examinationId, file_url) {
     try {
       const res = await pool.query(
-        "UPDATE phasefour_results SET file_url = $1 WHERE applicant_id = $2 RETURNING *",
-        [file_url, applicantId]
+        "UPDATE phasefour_results SET file_url = $1 WHERE examination_code = $2 RETURNING *",
+        [file_url, examinationId]
       );
       return res.rows[0];
     } catch (error) {
@@ -152,25 +154,25 @@ class ExaminationService {
   }
 
   // ✅ Delete all examination results for an applicant (if needed)
-  async deleteExaminationByApplicantId(applicantId) {
+  async deleteExaminationByExaminationId(examinationId) {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
       await client.query(
-        "DELETE FROM phaseone_results WHERE applicant_id = $1",
-        [applicantId]
+        "DELETE FROM phaseone_results WHERE examination_code = $1",
+        [examinationId]
       );
       await client.query(
-        "DELETE FROM phasetwo_results WHERE applicant_id = $1",
-        [applicantId]
+        "DELETE FROM phasetwo_results WHERE examination_code = $1",
+        [examinationId]
       );
       await client.query(
-        "DELETE FROM phasethree_results WHERE applicant_id = $1",
-        [applicantId]
+        "DELETE FROM phasethree_results WHERE examination_code = $1",
+        [examinationId]
       );
       await client.query(
-        "DELETE FROM phasefour_results WHERE applicant_id = $1",
-        [applicantId]
+        "DELETE FROM phasefour_results WHERE examination_code = $1",
+        [examinationId]
       );
       await client.query("COMMIT");
       return { message: "Examination results deleted successfully" };
