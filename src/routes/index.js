@@ -35,7 +35,7 @@ router.use("/onboarding", onboardingRoutes);
 router.use("/reports", reportsRoutes);
 
 // Mount examination routes
-router.use("/examinations", examinationRoutes);
+router.use("/examination", examinationRoutes);
 
 // Protected dashboard route
 router.get("/dashboard", authMiddleware, (req, res) => {

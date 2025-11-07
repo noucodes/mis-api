@@ -35,12 +35,10 @@ class ApplicantsService {
         job_source,
       } = data;
 
-      const examination_code = await this.generateUniqueExamCode();
-
       const result = await pool.query(
         `INSERT INTO applicants 
-           (first_name, last_name, position_applied, application_status, employment_status, examination_code, resume_url, referrer, email, phone, employment_location, job_source)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           (first_name, last_name, position_applied, application_status, employment_status, resume_url, referrer, email, phone, employment_location, job_source)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING *`,
         [
           first_name,
@@ -48,7 +46,6 @@ class ApplicantsService {
           position_applied,
           application_status,
           employment_status,
-          examination_code,
           resume_url,
           referrer,
           email,
@@ -106,7 +103,7 @@ class ApplicantsService {
     }
   }
 
-  // ✅ Update applicant & handle onboarding transition
+  // ✅ Update applicant & handle onboarding + examination code
   async updateApplicant(id, data) {
     const client = await pool.connect();
     try {
@@ -124,66 +121,82 @@ class ApplicantsService {
         final_interview_date,
       } = data;
 
-      // Set employment_status to "Onboarding" if new_status is "Hired"
+      // Auto-set employment_status when hired
       if (new_status === "Hired") {
         employment_status = "Onboarding";
       }
 
       await client.query("BEGIN");
 
-      // 🔹 Update applicant record
-      const result = await client.query(
-        `UPDATE applicants
-       SET first_name = COALESCE($1, first_name),
-           last_name = COALESCE($2, last_name),
-           position_applied = COALESCE($3, position_applied),
-           application_status = COALESCE($4, application_status),
-           employment_status = COALESCE($5, employment_status),
-           examination_date = COALESCE($6, examination_date),
-           final_interview_date = COALESCE($7, final_interview_date),
-           date_hired = CASE
-             WHEN $3 = 'Hired' AND date_hired IS NULL THEN NOW()
-             ELSE date_hired
-           END
-       WHERE applicant_id = $8
-       RETURNING *`,
-        [
-          first_name,
-          last_name,
-          position_applied,
-          new_status || application_status,
-          employment_status,
-          examination_date,
-          final_interview_date,
-          id,
-        ]
-      );
-
-      const updatedApplicant = result.rows[0];
-
-      // 🔹 Fetch examination_code
-      const examinationResult = await client.query(
-        `SELECT examination_code FROM applicants WHERE applicant_id = $1`,
-        [id]
-      );
-      const examination_code = examinationResult.rows[0]?.examination_code;
-      if (!examination_code && new_status === "Examination") {
-        throw new Error(`Examination code not found for applicant ID ${id}`);
+      // ------------------------------------------------------------------
+      // 1. Generate examination_code ONLY when moving to "Examination"
+      // ------------------------------------------------------------------
+      let examination_code = null;
+      if (new_status === "Examination") {
+        examination_code = await this.generateUniqueExamCode();
+        if (!examination_code) {
+          throw new Error(
+            `Failed to generate examination code for applicant ${id}`
+          );
+        }
       }
 
-      // 🔹 Insert into examination_details if new_status is "Examination"
-      if (new_status === "Examination") {
+      // ------------------------------------------------------------------
+      // 2. Update applicants table (including examination_code if generated)
+      // ------------------------------------------------------------------
+      const updateQuery = `
+      UPDATE applicants
+      SET 
+        first_name = COALESCE($1, first_name),
+        last_name = COALESCE($2, last_name),
+        position_applied = COALESCE($3, position_applied),
+        application_status = COALESCE($4, application_status),
+        employment_status = COALESCE($5, employment_status),
+        examination_code = COALESCE($6, examination_code),   -- ← NEW
+        examination_date = COALESCE($7, examination_date),
+        final_interview_date = COALESCE($8, final_interview_date),
+        date_hired = CASE
+          WHEN $4 = 'Hired' AND date_hired IS NULL THEN NOW()
+          ELSE date_hired
+        END
+      WHERE applicant_id = $9
+      RETURNING *;
+    `;
+
+      const updateValues = [
+        first_name,
+        last_name,
+        position_applied,
+        new_status || application_status,
+        employment_status,
+        examination_code, // ← will be NULL if not Examination
+        examination_date,
+        final_interview_date,
+        id,
+      ];
+
+      const result = await client.query(updateQuery, updateValues);
+      const updatedApplicant = result.rows[0];
+
+      // ------------------------------------------------------------------
+      // 3. Insert into examination_details (fixed table name typo)
+      // ------------------------------------------------------------------
+      if (new_status === "Examination" && examination_code) {
         await client.query(
-          `INSERT INTO examini_details (examination_id) VALUES($1)`,
+          `INSERT INTO examini_details (examination_id) VALUES ($1)
+         ON CONFLICT (examination_id) DO NOTHING`, // safe if already exists
           [examination_code]
         );
       }
 
-      // 🔹 Log history if status updated
-      if (application_status || employment_status) {
+      // ------------------------------------------------------------------
+      // 4. Log status history
+      // ------------------------------------------------------------------
+      const statusChanged = application_status || employment_status;
+      if (statusChanged) {
         await client.query(
           `INSERT INTO applicant_status_history
-           (applicant_id, status_type, status_value, comment, updated_by, updated_by_role)
+         (applicant_id, status_type, status_value, comment, updated_by, updated_by_role)
          VALUES ($1, $2, $3, $4, $5, $6)`,
           [
             id,
@@ -198,12 +211,14 @@ class ApplicantsService {
 
       await client.query("COMMIT");
 
-      // 🔹 Initialize onboarding tasks if newly onboarded
+      // ------------------------------------------------------------------
+      // 5. Initialize onboarding tasks (if needed)
+      // ------------------------------------------------------------------
       if (employment_status === "Onboarding") {
         await OnboardingService.initializeApplicantTasks(id);
       }
 
-      return updatedApplicant;
+      return updatedApplicant; // ← now includes examination_code
     } catch (error) {
       await client.query("ROLLBACK");
       console.error("Error updating applicant:", error);

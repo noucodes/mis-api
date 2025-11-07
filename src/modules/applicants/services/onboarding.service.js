@@ -5,7 +5,7 @@ class OnboardingService {
   async getAllApplicants() {
     try {
       const result = await pool.query(
-        "SELECT applicant_id, full_name, email FROM applicants WHERE employment_status = 'Onboarding' ORDER BY applicant_id DESC"
+        "SELECT applicant_id, first_name, last_name, email FROM applicants WHERE employment_status = 'Onboarding' ORDER BY applicant_id DESC"
       );
       return result.rows;
     } catch (error) {
