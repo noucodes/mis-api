@@ -507,13 +507,31 @@ class ReportsService {
 
   async getOnboardingDashboardMetrics() {
     const query = `
-    WITH onboarding_stats AS (
+    WITH applicant_task_status AS (
       SELECT 
-        COUNT(*)::int AS total_onboardings,
-        COUNT(*) FILTER (WHERE ao.is_completed = true)::int AS fully_onboarded,
-        COUNT(*) FILTER (WHERE ao.is_completed = false AND ao.is_completed IS NOT NULL)::int AS in_progress,
-        COUNT(*) FILTER (WHERE ao.is_completed IS NULL)::int AS pending
+        ao.applicant_id,
+        COUNT(*) AS total_tasks,
+        COUNT(*) FILTER (WHERE ao.is_completed = true) AS completed_tasks,
+        COUNT(*) FILTER (WHERE ao.is_completed = false) AS incomplete_tasks
       FROM applicant_onboarding ao
+      GROUP BY ao.applicant_id
+    ),
+    onboarding_stats AS (
+      SELECT
+        COUNT(ats.applicant_id)::int AS total_onboardings,
+        COUNT(*) FILTER (WHERE ats.total_tasks > 0 AND ats.incomplete_tasks = 0)::int AS fully_onboarded,
+        COUNT(*) FILTER (WHERE ats.completed_tasks > 0 AND ats.incomplete_tasks > 0)::int AS in_progress,
+        (SELECT COUNT(DISTINCT ash.applicant_id)
+        FROM applicant_status_history ash
+        WHERE ash.status_type = 'Onboarding'
+          AND ash.status_value = 'Onboarding'
+          AND ash.status_created >= date_trunc('year', CURRENT_DATE)
+          AND NOT EXISTS (
+            SELECT 1 FROM applicant_onboarding ao 
+            WHERE ao.applicant_id = ash.applicant_id
+          )
+        )::int AS pending
+      FROM applicant_task_status ats
     ),
     monthly_hires AS (
       SELECT 
@@ -521,10 +539,12 @@ class ReportsService {
         EXTRACT(MONTH FROM ash.status_created) AS month_num,
         COUNT(DISTINCT ash.applicant_id) AS hires
       FROM applicant_status_history ash
-      WHERE ash.status_type = 'Onboarding'
-        AND ash.status_value = 'Onboarding'
+      WHERE ash.status_type = 'Employment'          -- or whatever your type is
+        AND LOWER(ash.status_value) = 'onboarding'       -- exact match, case-insensitive
         AND ash.status_created >= date_trunc('year', CURRENT_DATE)
-      GROUP BY TO_CHAR(ash.status_created, 'Mon'), month_num
+      GROUP BY 
+        TO_CHAR(ash.status_created, 'Mon'), 
+        EXTRACT(MONTH FROM ash.status_created)
       ORDER BY month_num
     ),
     task_completion AS (
