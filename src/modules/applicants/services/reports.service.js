@@ -342,9 +342,9 @@ class ReportsService {
       SELECT 
         COUNT(*) AS total_applicants,
         
-        COUNT(*) FILTER (WHERE employment_status = 'shortlisted') AS shortlisted,
-        COUNT(*) FILTER (WHERE employment_status = 'rejected') AS rejected,
-        COUNT(*) FILTER (WHERE employment_status = 'blocklisted') AS blocklisted,
+        COUNT(*) FILTER (WHERE employment_status = 'Shortlisted') AS shortlisted,
+        COUNT(*) FILTER (WHERE employment_status = 'Rejected') AS rejected,
+        COUNT(*) FILTER (WHERE employment_status = 'Blocklisted') AS blocklisted,
         
         -- Not Qualified: applied but never moved forward
         COUNT(*) FILTER (
@@ -392,12 +392,11 @@ class ReportsService {
 
     const query = `
     SELECT 
-      COUNT(*) FILTER (WHERE employment_status IS NULL OR employment_status NOT IN ('rejected', 'shortlisted', 'blocklisted')) AS applicant,
-      COUNT(*) FILTER (WHERE employment_status = 'shortlisted') AS shortlisted,
-      COUNT(*) FILTER (WHERE employment_status = 'rejected') AS reject,
-      COUNT(*) FILTER (WHERE employment_status = 'blocklisted') AS blocklist,
-      COUNT(*) FILTER (WHERE application_status NOT IN ('Hired', 'Initial Interview', 'Final Interview', 'Examination') 
-                       AND employment_status IS NULL) AS not_qualified
+      COUNT(*) FILTER (WHERE employment_status = 'Applicant') AS applicant,
+      COUNT(*) FILTER (WHERE employment_status = 'Shortlisted') AS shortlisted,
+      COUNT(*) FILTER (WHERE employment_status = 'Rejected') AS reject,
+      COUNT(*) FILTER (WHERE employment_status = 'Blocklisted') AS blocklist,
+      COUNT(*) FILTER (WHERE employment_status = 'Not Qualified') AS not_qualified
     FROM applicants
     WHERE applicant_created::date BETWEEN $1 AND $2
   `;
