@@ -33,12 +33,13 @@ class ApplicantsService {
         phone,
         employment_location,
         job_source,
+        gender,
       } = data;
 
       const result = await pool.query(
         `INSERT INTO applicants 
-           (first_name, last_name, position_applied, application_status, employment_status, resume_url, referrer, email, phone, employment_location, job_source)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           (first_name, last_name, position_applied, application_status, employment_status, resume_url, referrer, email, phone, employment_location, job_source, gender)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          RETURNING *`,
         [
           first_name,
@@ -52,6 +53,7 @@ class ApplicantsService {
           phone,
           employment_location,
           job_source,
+          gender,
         ]
       );
 

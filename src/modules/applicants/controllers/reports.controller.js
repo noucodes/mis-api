@@ -113,3 +113,51 @@ exports.getMonthlyHiredVsRejected = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+exports.getRecruitmentKPIs = async (req, res) => {
+  try {
+    const { year = new Date().getFullYear(), month = "January" } = req.query;
+    const kpis = await ReportsService.getRecruitmentKPIs(year, month);
+    res.json(kpis);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getOnboardingPipeline = async (req, res) => {
+  try {
+    const { year = new Date().getFullYear(), month = "January" } = req.query;
+    const data = await ReportsService.getOnboardingPipeline(year, month);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getHiringTrend = async (req, res) => {
+  try {
+    const { year = new Date().getFullYear() } = req.query;
+    const data = await ReportsService.getHiringTrend(year);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getUpcomingOnboarding = async (req, res) => {
+  try {
+    const data = await ReportsService.getUpcomingOnboarding();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getOnboardingDashboard = async (req, res) => {
+  try {
+    const data = await ReportsService.getOnboardingDashboardMetrics();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

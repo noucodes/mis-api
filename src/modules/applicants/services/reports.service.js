@@ -1,6 +1,6 @@
 // services/ReportsService.js
 const pool = require("../../../config/db");
-const { startOfMonth, endOfMonth, subMonths, format } = require("date-fns");
+const { formatDistanceToNow, subMonths, format } = require("date-fns");
 
 class ReportsService {
   // Get applicant counts by status for a date range
@@ -328,6 +328,293 @@ class ReportsService {
     } catch (error) {
       console.error("Error fetching monthly stats:", error);
       throw new Error("Failed to fetch monthly data");
+    }
+  }
+  // === Get All KPIs for Selected Year + Month ===
+  async getRecruitmentKPIs(year, month) {
+    const monthNum = new Date(`${month} 1, ${year}`).getMonth() + 1;
+    const startDate = `${year}-${String(monthNum).padStart(2, "0")}-01`;
+    const lastDay = new Date(year, monthNum, 0).getDate();
+    const endDate = `${year}-${String(monthNum).padStart(2, "0")}-${lastDay}`;
+
+    const query = `
+    WITH monthly AS (
+      SELECT 
+        COUNT(*) AS total_applicants,
+        
+        COUNT(*) FILTER (WHERE employment_status = 'shortlisted') AS shortlisted,
+        COUNT(*) FILTER (WHERE employment_status = 'rejected') AS rejected,
+        COUNT(*) FILTER (WHERE employment_status = 'blocklisted') AS blocklisted,
+        
+        -- Not Qualified: applied but never moved forward
+        COUNT(*) FILTER (
+          WHERE employment_status IS NULL 
+            AND application_status NOT IN ('Initial Interview', 'Examination', 'Final Interview', 'Hired')
+        ) AS not_qualified,
+        
+        -- Hired this month (by date_hired or status)
+        COUNT(*) FILTER (
+          WHERE (application_status = 'Hired' OR date_hired::date BETWEEN $1 AND $2)
+        ) AS hired
+      FROM applicants
+      WHERE applicant_created::date BETWEEN $1 AND $2
+    )
+    SELECT 
+      total_applicants::int,
+      shortlisted::int,
+      rejected::int,
+      blocklisted::int,
+      not_qualified::int,
+      hired::int,
+      ROUND(
+        CASE WHEN total_applicants > 0 
+          THEN (shortlisted::decimal / total_applicants) * 100 
+          ELSE 0 
+        END, 1
+      ) AS shortlist_rate
+    FROM monthly
+  `;
+
+    try {
+      const result = await pool.query(query, [startDate, endDate]);
+      return result.rows[0]; // single row with all KPIs
+    } catch (error) {
+      console.error("Error fetching KPIs:", error);
+      throw new Error("Failed to fetch recruitment KPIs");
+    }
+  }
+
+  // === Onboarding Pipeline (Pie Chart) ===
+  async getOnboardingPipeline(year, month) {
+    const monthNum = new Date(`${month} 1, ${year}`).getMonth() + 1;
+    const startDate = `${year}-${String(monthNum).padStart(2, "0")}-01`;
+    const endDate = new Date(year, monthNum, 0).toISOString().slice(0, 10); // last day
+
+    const query = `
+    SELECT 
+      COUNT(*) FILTER (WHERE employment_status IS NULL OR employment_status NOT IN ('rejected', 'shortlisted', 'blocklisted')) AS applicant,
+      COUNT(*) FILTER (WHERE employment_status = 'shortlisted') AS shortlisted,
+      COUNT(*) FILTER (WHERE employment_status = 'rejected') AS reject,
+      COUNT(*) FILTER (WHERE employment_status = 'blocklisted') AS blocklist,
+      COUNT(*) FILTER (WHERE application_status NOT IN ('Hired', 'Initial Interview', 'Final Interview', 'Examination') 
+                       AND employment_status IS NULL) AS not_qualified
+    FROM applicants
+    WHERE applicant_created::date BETWEEN $1 AND $2
+  `;
+
+    try {
+      const result = await pool.query(query, [startDate, endDate]);
+      const row = result.rows[0];
+
+      return {
+        Applicant: parseInt(row.applicant || 0),
+        Shortlisted: parseInt(row.shortlisted || 0),
+        "Not Qualified": parseInt(row.not_qualified || 0),
+        Reject: parseInt(row.reject || 0),
+        Blocklist: parseInt(row.blocklist || 0),
+      };
+    } catch (error) {
+      console.error("Error fetching onboarding pipeline:", error);
+      throw new Error("Failed to fetch pipeline");
+    }
+  }
+
+  // === Hiring Trend (Line Chart) ===
+  async getHiringTrend(year) {
+    const query = `
+    SELECT 
+      TO_CHAR(applicant_created, 'Month') AS month,
+      EXTRACT(MONTH FROM applicant_created) AS month_num,
+      COUNT(*) FILTER (WHERE application_status = 'Initial Interview') AS "Initial Interview",
+      COUNT(*) FILTER (WHERE application_status = 'Examination') AS "Examination",
+      COUNT(*) FILTER (WHERE application_status = 'Final Interview') AS "Final Interview",
+      COUNT(*) FILTER (WHERE application_status = 'Hired' OR date_hired IS NOT NULL) AS "Hired"
+    FROM applicants
+    WHERE EXTRACT(YEAR FROM applicant_created) = $1
+    GROUP BY TO_CHAR(applicant_created, 'Month'), month_num
+    ORDER BY month_num
+  `;
+
+    try {
+      const result = await pool.query(query, [year]);
+
+      // Ensure all 12 months exist
+      const months = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+      ];
+
+      return months.map((month, i) => {
+        const found = result.rows.find((r) => r.month.trim() === month);
+        return {
+          month,
+          "Initial Interview": found
+            ? parseInt(found["Initial Interview"] || 0)
+            : 0,
+          Examination: found ? parseInt(found.Examination || 0) : 0,
+          "Final Interview": found
+            ? parseInt(found["Final Interview"] || 0)
+            : 0,
+          Hired: found ? parseInt(found.Hired || 0) : 0,
+        };
+      });
+    } catch (error) {
+      console.error("Error fetching hiring trend:", error);
+      throw new Error("Failed to fetch trend");
+    }
+  }
+
+  // === Upcoming Onboarding Applicants (Table) ===
+  async getUpcomingOnboarding() {
+    const query = `
+    SELECT 
+      a.first_name || ' ' || a.last_name AS name,
+      ash.status_value,
+      ash.comment,
+      ash.updated_by,
+      TO_CHAR(ash.status_created, 'Mon DD, YYYY') AS status_created
+    FROM applicant_status_history ash
+    JOIN applicants a ON ash.applicant_id = a.applicant_id
+    WHERE ash.status_type = 'Onboarding'
+      AND ash.status_value IN ('Applied', 'Rejected', 'Shortlisted')
+    ORDER BY ash.status_created DESC
+    LIMIT 20
+  `;
+
+    try {
+      const result = await pool.query(query);
+      return result.rows.map((row) => ({
+        name: row.name || "Unknown Applicant",
+        statusValue: row.status_value,
+        comment: row.comment || "-",
+        updatedBy: row.updated_by || "System",
+        statusCreated: row.status_created,
+      }));
+    } catch (error) {
+      console.error("Error fetching upcoming applicants:", error);
+      throw new Error("Failed to fetch upcoming");
+    }
+  }
+
+  async getOnboardingDashboardMetrics() {
+    const query = `
+    WITH onboarding_stats AS (
+      SELECT 
+        COUNT(*)::int AS total_onboardings,
+        COUNT(*) FILTER (WHERE ao.is_completed = true)::int AS fully_onboarded,
+        COUNT(*) FILTER (WHERE ao.is_completed = false AND ao.is_completed IS NOT NULL)::int AS in_progress,
+        COUNT(*) FILTER (WHERE ao.is_completed IS NULL)::int AS pending
+      FROM applicant_onboarding ao
+    ),
+    monthly_hires AS (
+      SELECT 
+        TO_CHAR(ash.status_created, 'Mon') AS month,
+        EXTRACT(MONTH FROM ash.status_created) AS month_num,
+        COUNT(DISTINCT ash.applicant_id) AS hires
+      FROM applicant_status_history ash
+      WHERE ash.status_type = 'Onboarding'
+        AND ash.status_value = 'Onboarding'
+        AND ash.status_created >= date_trunc('year', CURRENT_DATE)
+      GROUP BY TO_CHAR(ash.status_created, 'Mon'), month_num
+      ORDER BY month_num
+    ),
+    task_completion AS (
+      SELECT 
+        ot.task_id,
+        ot.task_name AS task,
+        COUNT(ao.applicant_id) AS total_assigned,
+        COUNT(ao.applicant_id) FILTER (WHERE ao.is_completed = true) AS completed,
+        ROUND(
+          CASE 
+            WHEN COUNT(ao.applicant_id) = 0 THEN 0
+            ELSE (COUNT(ao.applicant_id) FILTER (WHERE ao.is_completed = true)::decimal / COUNT(ao.applicant_id)) * 100 
+          END, 1
+        ) AS completion_rate
+      FROM onboarding_tasks ot
+      LEFT JOIN applicant_onboarding ao ON ot.task_id = ao.task_id
+      GROUP BY ot.task_id, ot.task_name
+      ORDER BY completion_rate DESC
+    ),
+    recent_activities AS (
+      SELECT 
+        a.first_name || ' ' || a.last_name AS name,
+        ot.task_name AS task,
+        ao.status_updated AS time_ago_raw
+      FROM applicant_onboarding ao
+      JOIN applicants a ON ao.applicant_id = a.applicant_id
+      JOIN onboarding_tasks ot ON ao.task_id = ot.task_id
+      WHERE ao.status_updated >= NOW() - INTERVAL '7 days'
+      ORDER BY ao.status_updated DESC
+      LIMIT 10
+    )
+    SELECT 
+      (SELECT total_onboardings FROM onboarding_stats) AS total_onboardings,
+      (SELECT fully_onboarded FROM onboarding_stats) AS fully_onboarded,
+      (SELECT in_progress FROM onboarding_stats) AS in_progress,
+      (SELECT pending FROM onboarding_stats) AS pending,
+      COALESCE((
+        SELECT json_agg(json_build_object('month', mh.month, 'hires', mh.hires))
+        FROM monthly_hires mh
+      ), '[]') AS monthly_hires,
+      COALESCE((
+        SELECT json_agg(json_build_object('task_id', tc.task_id, 'task', tc.task, 'completion_rate', tc.completion_rate))
+        FROM task_completion tc
+      ), '[]') AS task_completion,
+      COALESCE((
+        SELECT json_agg(json_build_object('name', ra.name, 'task', ra.task, 'time_ago_raw', ra.time_ago_raw))
+        FROM recent_activities ra
+      ), '[]') AS recent_activities
+  `;
+
+    try {
+      const result = await pool.query(query);
+      const row = result.rows[0];
+
+      const monthsOrder = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
+      const monthlyHires = monthsOrder.map((month) => {
+        const found = row.monthly_hires.find((m) => m.month === month);
+        return { month, hires: found ? found.hires : 0 };
+      });
+
+      return {
+        totalOnboardings: row.total_onboardings || 0,
+        fullyOnboarded: row.fully_onboarded || 0,
+        inProgress: row.in_progress || 0,
+        pending: row.pending || 0,
+        monthlyHires,
+        taskCompletion: row.task_completion || [],
+        recentActivities: (row.recent_activities || []).map((a) => ({
+          name: a.name?.trim() || "Unknown",
+          task: a.task,
+          timeAgoRaw: a.time_ago_raw,
+        })),
+      };
+    } catch (error) {
+      console.error("Error fetching onboarding dashboard:", error);
+      throw error;
     }
   }
 }

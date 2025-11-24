@@ -11,5 +11,10 @@ router.get(
   "/monthly-hired-rejected",
   reportsController.getMonthlyHiredVsRejected
 );
+router.get("/recruitment-kpis", reportsController.getRecruitmentKPIs);
+router.get("/onboarding-pipeline", reportsController.getOnboardingPipeline);
+router.get("/hiring-trend", reportsController.getHiringTrend);
+router.get("/upcoming-onboarding", reportsController.getUpcomingOnboarding);
+router.get("/onboarding-dashboard", reportsController.getOnboardingDashboard);
 
 module.exports = router;
