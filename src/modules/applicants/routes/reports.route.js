@@ -16,5 +16,9 @@ router.get("/onboarding-pipeline", reportsController.getOnboardingPipeline);
 router.get("/hiring-trend", reportsController.getHiringTrend);
 router.get("/upcoming-onboarding", reportsController.getUpcomingOnboarding);
 router.get("/onboarding-dashboard", reportsController.getOnboardingDashboard);
+router.get(
+  "/applicant-status-history",
+  reportsController.getApplicantStatusHistory
+);
 
 module.exports = router;

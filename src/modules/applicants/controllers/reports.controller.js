@@ -161,3 +161,12 @@ exports.getOnboardingDashboard = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+exports.getApplicantStatusHistory = async (req, res) => {
+  try {
+    const history = await ReportsService.getApplicantStatusHistory();
+    res.json(history);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
