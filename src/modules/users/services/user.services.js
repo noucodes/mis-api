@@ -9,9 +9,10 @@ class UserServices {
 
   async createUserService(data) {
     try {
-      const { name, email, password, employeeId, role, department, position } =
+      const { name, email, password, employeeId, department, position } =
         data;
 
+      const role = "user";
       // Check if email already exists
       const checkUserEmail = await pool.query(
         "SELECT * FROM users WHERE email = $1",

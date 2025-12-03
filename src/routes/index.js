@@ -8,6 +8,14 @@ const applicantsStatusRoutes = require("../modules/applicants/routes/status.rout
 const onboardingRoutes = require("../modules/applicants/routes/onboarding.route");
 const reportsRoutes = require("../modules/applicants/routes/reports.route");
 const examinationRoutes = require("../modules/applicants/routes/examination.route");
+
+// Attendance routes (HR/Admin - all employees)
+const attendanceRoutes = require("../modules/attendance/route/user.route");
+const attendanceHistoryRoutes = require("../modules/attendance/route/user.history");
+
+// Employee-specific attendance routes (Individual user)
+const employeeAttendanceRoutes = require("../modules/employee/attendance/user.attendance");
+
 const authMiddleware = require("../middlewares/auth");
 const logger = require("../middlewares/logging");
 
@@ -36,6 +44,13 @@ router.use("/reports", reportsRoutes);
 
 // Mount examination routes
 router.use("/examination", examinationRoutes);
+
+// Mount HR/Admin attendance routes (all employees)
+router.use("/attendance", attendanceRoutes);
+router.use("/attendance/history", attendanceHistoryRoutes);
+
+// Mount employee-specific attendance route (protected, individual user only)
+router.use("/employee/attendance", authMiddleware, employeeAttendanceRoutes);
 
 // Protected dashboard route
 router.get("/dashboard", authMiddleware, (req, res) => {
