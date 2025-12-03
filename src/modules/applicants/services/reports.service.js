@@ -248,18 +248,18 @@ class ReportsService {
   async getApplicantSources() {
     const query = `
     SELECT 
-      COALESCE(job_source, 'Others') AS source,
+      COALESCE(job_source, 'Other') AS source,
       COUNT(*) AS value
     FROM applicants
     WHERE job_source IS NOT NULL AND job_source != ''
-    GROUP BY COALESCE(job_source, 'Others')
+    GROUP BY COALESCE(job_source, 'Other')
     ORDER BY value DESC
   `;
 
     try {
       const result = await pool.query(query);
 
-      // Force "Others" to the end and limit to top 5 (like your static data)
+      // Force "Other" to the end and limit to top 5 (like your static data)
       const topSources = result.rows
         .filter((row) => row.source !== "Others")
         .slice(0, 4);
@@ -273,7 +273,6 @@ class ReportsService {
           name: row.source,
           value: parseInt(row.value, 10),
         })),
-        { name: "Others", value: othersCount || 7 }, // fallback if no others
       ];
 
       return final;
@@ -634,6 +633,42 @@ class ReportsService {
     } catch (error) {
       console.error("Error fetching onboarding dashboard:", error);
       throw error;
+    }
+  }
+  // === Get All Applicant Status History with Full Names ===
+  async getApplicantStatusHistory() {
+    const query = `
+    SELECT 
+      ash.status_id,
+      ash.applicant_id,
+      a.first_name || ' ' || COALESCE(a.last_name, '') AS name,
+      ash.status_type,
+      ash.status_value,
+      ash.comment,
+      ash.updated_by,
+      TO_CHAR(ash.status_created, 'Mon DD, YYYY HH12:MI AM') AS status_created,
+      ash.updated_by_role
+    FROM applicant_status_history ash
+    JOIN applicants a ON ash.applicant_id = a.applicant_id
+    ORDER BY ash.status_created DESC
+  `;
+
+    try {
+      const result = await pool.query(query);
+      return result.rows.map((row) => ({
+        statusId: row.status_id,
+        applicantId: row.applicant_id,
+        name: row.name?.trim() || "Unknown Applicant",
+        statusType: row.status_type,
+        statusValue: row.status_value,
+        comment: row.comment || "-",
+        updatedBy: row.updated_by || "System",
+        statusCreated: row.status_created,
+        updatedByRole: row.updated_by_role || "-",
+      }));
+    } catch (error) {
+      console.error("Error fetching status history:", error);
+      throw new Error("Failed to fetch applicant status history");
     }
   }
 }
